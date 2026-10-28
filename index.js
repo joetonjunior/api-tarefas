@@ -1,11 +1,51 @@
 const express = require("express");
+const cors = require("cors");
 const executarSQL = require("./services");
 const app = express();
+
+app.use(cors());
 
 app.use(express.json());
 
 app.get("/", (req, res) => {
     res.send("Olá mundo");
+});
+
+
+app.post("/login", async (req, res) => {
+    try {
+        const { email, senha } = req.body;
+
+        const emailExiste = await executarSQL(`SELECT * FROM usuarios WHERE email = '${email}'`);
+        
+        if(emailExiste.rowCount == 0){
+            res.json({
+                tipo: "warning",
+                mensagem: "Email ou senha incorreto"
+            });
+            return;
+        }
+
+        if(emailExiste.rows[0].senha != senha){
+            res.json({
+                tipo: "warning",
+                mensagem: "Email ou senha incorreto"
+            });
+            return;
+        }
+        
+        delete emailExiste.rows[0].senha;
+        res.json({
+            tipo: "success",
+            mensagem: "Login realizado com sucesso.",
+            usuario: emailExiste.rows[0]
+         });
+       
+    } catch (error) {
+        res.json({
+            mensagem: error.message
+        })
+    }
 });
 
 app.get("/usuarios", async (req, res) => {
@@ -102,10 +142,99 @@ app.delete("/usuarios/:id", async (req, res) => {
     }
 });
 
+//================================TAREFAS================
+
+app.get("/tarefas/:usuario", async (req, res) => {
+    try {
+        const { usuario } = req.params;
+        const query = await executarSQL(`SELECT * FROM tarefas where usuario_id = ${usuario};`);
+        res.json(query.rows);
+    } catch (error) {
+        res.json({
+            mensagem: error.message
+        })
+    }
+});
+
+app.post("/tarefas", async (req, res) => {
+    try {
+        const { titulo, descricao, usuario_id } = req.body;
+
+        const query = await executarSQL(`INSERT INTO tarefas (titulo, descricao, usuario_id) VALUES ($1, $2, $3) RETURNING *;`,[titulo, descricao, usuario_id ]);
+        
+        if(query.rowCount > 0){
+            res.json({
+                tipo: "success",
+                mensagem: "Registro criado com sucesso"
+            });
+        }else{
+            res.json({
+                tipo: "warning",
+                mensagem: "Falha ao criar registro"
+            });
+        }
+    } catch (error) {
+        res.json({
+            mensagem: error.message
+        })
+    }
+});
+
+app.put("/tarefas/:id", async (req, res) => {
+    try {
+        const { titulo, descricao, usuario_id } = req.body;
+        const { id } = req.params;
+        
+        const query = await executarSQL(`UPDATE tarefas SET titulo=$1, descricao=$2, usuario_id=$3 WHERE id = ${id} RETURNING *;`, [titulo, descricao, usuario_id]);
+        
+        if(query.rowCount > 0){
+            res.json({
+                tipo: "success",
+                mensagem: "Registro atualizado com sucesso"
+            });
+        }else{
+            res.json({
+                tipo: "warning",
+                mensagem: "Falha ao atualizar registro"
+            });
+        }
+    } catch (error) {
+        res.json({
+            mensagem: error.message
+        })
+    }
+});
+
+app.delete("/tarefas/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const query = await executarSQL(`DELETE FROM tarefas WHERE id = ${id} RETURNING *;`);
+        
+        if(query.rowCount > 0){
+            res.json({
+                tipo: "success",
+                mensagem: "Registro deletado com sucesso"
+            });
+        }else{
+            res.json({
+                tipo: "warning",
+                mensagem: "Registro não encontrado"
+            });
+        }
+    } catch (error) {
+        res.json({
+            mensagem: error.message
+        })
+    }
+});
+//=======================================================
 
 
 app.use((req, res) => {
-    res.status(404).send("Rota não encontrada");
+    res.status(404).json({
+        mensagem: "Rota não encontrada"
+    });
 });
 
 app.listen(3000, () => {
